@@ -6,19 +6,80 @@
   <title>QR Inventory Scanner</title>
   <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
   <style>
-    body { font-family: sans-serif; text-align: center; padding: 20px; }
-    input, select, button { margin: 10px; padding: 10px; font-size: 16px; }
-    #reader { margin: auto; width: 300px; height: 300px; border: 1px solid #ccc; }
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #f4f7f9;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: start;
+      min-height: 100vh;
+    }
+    h2 {
+      margin-top: 20px;
+      color: #333;
+    }
+    #reader {
+      width: 320px;
+      height: 240px;
+      margin: 20px 0;
+      border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    #cameraSelect {
+      padding: 8px;
+      font-size: 16px;
+      margin-bottom: 10px;
+    }
+    form {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      width: 90%;
+      max-width: 400px;
+      margin-bottom: 20px;
+    }
+    input {
+      width: 100%;
+      padding: 10px;
+      margin: 8px 0;
+      font-size: 16px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
+    button {
+      width: 100%;
+      padding: 12px;
+      margin: 6px 0;
+      font-size: 16px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    button[name="action"][value="IN"] {
+      background: #4caf50;
+      color: white;
+    }
+    button[name="action"][value="OUT"] {
+      background: #f44336;
+      color: white;
+    }
   </style>
 </head>
 <body>
   <h2>📦 Scan Product QR</h2>
-  <select id="cameraSelect"></select><br>
   <div id="reader"></div>
+  <select id="cameraSelect"></select>
   <form id="inventoryForm">
-    <input type="text" id="itemId" placeholder="Product ID" required readonly><br>
-    <input type="text" id="itemName" placeholder="Product Name" required readonly><br>
-    <input type="number" id="quantity" value="1" readonly><br>
+    <input type="text" id="itemId" placeholder="Product ID" required readonly>
+    <input type="text" id="itemName" placeholder="Product Name" required readonly>
+    <input type="number" id="quantity" value="1" readonly>
     <button type="submit" name="action" value="IN">✅ IN</button>
     <button type="submit" name="action" value="OUT">📤 OUT</button>
   </form>
@@ -40,31 +101,35 @@
     });
 
     function startScanner(cameraId) {
-      if (qrScanner) qrScanner.stop();
-      qrScanner = new Html5Qrcode("reader");
-      qrScanner.start(
-        cameraId,
-        { fps: 10, qrbox: 250 },
-        qrCodeMessage => {
-          const [productId, productName] = qrCodeMessage.split(',');
-          itemIdField.value = productId || '';
-          itemNameField.value = productName || '';
-        },
-        errorMessage => {
-          console.log("QR error", errorMessage);
-        }
-      ).catch(err => console.error("Failed to start scanner:", err));
+      if (qrScanner) qrScanner.stop().then(() => {
+        qrScanner.clear();
+        qrScanner.start(
+          cameraId,
+          { fps: 10, qrbox: { width: 250, height: 250 } },
+          qrCodeMessage => {
+            const [productId, productName] = qrCodeMessage.split(',');
+            itemIdField.value = productId || '';
+            itemNameField.value = productName || '';
+          },
+          errorMessage => {
+            console.log("QR error", errorMessage);
+          }
+        ).catch(err => console.error("Failed to start scanner:", err));
+      });
     }
 
     Html5Qrcode.getCameras().then(devices => {
       if (devices && devices.length) {
+        cameraSelect.innerHTML = "";
         devices.forEach((device, index) => {
           const option = document.createElement("option");
           option.value = device.id;
           option.text = device.label || `Camera ${index + 1}`;
           cameraSelect.appendChild(option);
         });
-        currentCameraId = devices[0].id;
+
+        const backCam = devices.find(d => d.label.toLowerCase().includes("back")) || devices[0];
+        currentCameraId = backCam.id;
         cameraSelect.value = currentCameraId;
         startScanner(currentCameraId);
       } else {

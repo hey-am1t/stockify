@@ -22,8 +22,9 @@
       color: #333;
     }
     #reader {
-      width: 320px;
-      height: 240px;
+      width: 100%;
+      max-width: 400px;
+      height: auto;
       margin: 20px 0;
       border-radius: 8px;
       box-shadow: 0 0 10px rgba(0,0,0,0.1);
@@ -86,37 +87,20 @@
 
   <script>
     let selectedAction = "IN";
-    let qrScanner;
+    let html5QrCode;
     let currentCameraId = null;
 
     const form = document.getElementById('inventoryForm');
     const itemIdField = document.getElementById('itemId');
     const itemNameField = document.getElementById('itemName');
     const cameraSelect = document.getElementById('cameraSelect');
+    const readerElem = document.getElementById("reader");
 
     form.addEventListener("click", (e) => {
       if (e.target.tagName === "BUTTON") {
         selectedAction = e.target.value;
       }
     });
-
-    function startScanner(cameraId) {
-      if (qrScanner) qrScanner.stop().then(() => {
-        qrScanner.clear();
-        qrScanner.start(
-          cameraId,
-          { fps: 10, qrbox: { width: 250, height: 250 } },
-          qrCodeMessage => {
-            const [productId, productName] = qrCodeMessage.split(',');
-            itemIdField.value = productId || '';
-            itemNameField.value = productName || '';
-          },
-          errorMessage => {
-            console.log("QR error", errorMessage);
-          }
-        ).catch(err => console.error("Failed to start scanner:", err));
-      });
-    }
 
     Html5Qrcode.getCameras().then(devices => {
       if (devices && devices.length) {
@@ -135,12 +119,45 @@
       } else {
         alert("No camera found");
       }
+    }).catch(err => {
+      console.error("Camera error:", err);
     });
 
     cameraSelect.addEventListener("change", () => {
       currentCameraId = cameraSelect.value;
       startScanner(currentCameraId);
     });
+
+    function startScanner(cameraId) {
+      if (html5QrCode) {
+        html5QrCode.stop().then(() => {
+          html5QrCode.clear();
+          runScanner(cameraId);
+        }).catch(err => {
+          console.error("Failed to stop QR scanner:", err);
+        });
+      } else {
+        runScanner(cameraId);
+      }
+    }
+
+    function runScanner(cameraId) {
+      html5QrCode = new Html5Qrcode("reader");
+      html5QrCode.start(
+        { deviceId: { exact: cameraId } },
+        { fps: 10, qrbox: 250 },
+        (decodedText, decodedResult) => {
+          const [productId, productName] = decodedText.split(',');
+          itemIdField.value = productId || '';
+          itemNameField.value = productName || '';
+        },
+        (errorMessage) => {
+          console.warn("QR Code no match", errorMessage);
+        }
+      ).catch(err => {
+        console.error("Unable to start scanning:", err);
+      });
+    }
 
     form.addEventListener('submit', (e) => {
       e.preventDefault();

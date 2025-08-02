@@ -8,11 +8,12 @@
   <style>
     body { font-family: sans-serif; text-align: center; padding: 20px; }
     input, select, button { margin: 10px; padding: 10px; font-size: 16px; }
-    #reader { margin: auto; width: 300px; height: 300px; }
+    #reader { margin: auto; width: 300px; height: 300px; border: 1px solid #ccc; }
   </style>
 </head>
 <body>
   <h2>📦 Scan Product QR</h2>
+  <select id="cameraSelect"></select><br>
   <div id="reader"></div>
   <form id="inventoryForm">
     <input type="text" id="itemId" placeholder="Product ID" required readonly><br>
@@ -24,10 +25,13 @@
 
   <script>
     let selectedAction = "IN";
+    let qrScanner;
+    let currentCameraId = null;
 
     const form = document.getElementById('inventoryForm');
     const itemIdField = document.getElementById('itemId');
     const itemNameField = document.getElementById('itemName');
+    const cameraSelect = document.getElementById('cameraSelect');
 
     form.addEventListener("click", (e) => {
       if (e.target.tagName === "BUTTON") {
@@ -35,20 +39,42 @@
       }
     });
 
-    const qrScanner = new Html5Qrcode("reader");
+    function startScanner(cameraId) {
+      if (qrScanner) qrScanner.stop();
+      qrScanner = new Html5Qrcode("reader");
+      qrScanner.start(
+        cameraId,
+        { fps: 10, qrbox: 250 },
+        qrCodeMessage => {
+          const [productId, productName] = qrCodeMessage.split(',');
+          itemIdField.value = productId || '';
+          itemNameField.value = productName || '';
+        },
+        errorMessage => {
+          console.log("QR error", errorMessage);
+        }
+      ).catch(err => console.error("Failed to start scanner:", err));
+    }
+
     Html5Qrcode.getCameras().then(devices => {
       if (devices && devices.length) {
-        qrScanner.start(
-          devices[0].id,
-          { fps: 10, qrbox: 250 },
-          qrCodeMessage => {
-            const [productId, productName] = qrCodeMessage.split(',');
-            itemIdField.value = productId || '';
-            itemNameField.value = productName || '';
-          },
-          errorMessage => {}
-        );
+        devices.forEach((device, index) => {
+          const option = document.createElement("option");
+          option.value = device.id;
+          option.text = device.label || `Camera ${index + 1}`;
+          cameraSelect.appendChild(option);
+        });
+        currentCameraId = devices[0].id;
+        cameraSelect.value = currentCameraId;
+        startScanner(currentCameraId);
+      } else {
+        alert("No camera found");
       }
+    });
+
+    cameraSelect.addEventListener("change", () => {
+      currentCameraId = cameraSelect.value;
+      startScanner(currentCameraId);
     });
 
     form.addEventListener('submit', (e) => {
@@ -61,7 +87,7 @@
         timestamp: new Date().toISOString()
       };
 
-      fetch('https://script.google.com/macros/s/AKfycbyhI3BYi2gozas8DAJFdj1j__b43OA0_7y0Mh3UFWDzMvI9WY79ngWWRattU9PcjjPq-w/exec, {
+      fetch('https://script.google.com/macros/s/AKfycbyhI3BYi2gozas8DAJFdj1j__b43OA0_7y0Mh3UFWDzMvI9WY79ngWWRattU9PcjjPq-w/exec', {
         method: 'POST',
         mode: 'no-cors',
         headers: { 'Content-Type': 'application/json' },
@@ -76,4 +102,3 @@
   </script>
 </body>
 </html>
-

@@ -125,12 +125,13 @@
   <audio id="beep" src="https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg"></audio>
 
   <script>
-    const API_URL = 'https://script.google.com/macros/s/AKfycbyBk3ov3fWzD-Ogyi9tUvYjSkBEBqhHyjiBm9WMwfjKeuX-AxBjs3JS8lQIJy5GF0N5oQ/exec'; // Replace with your Apps Script URL
+    const API_URL = 'https://script.google.com/macros/s/AKfycbwmI7l3MfmMB89wB87zfi3Vf37A0YFYY2NwowJWe1GZLyywrIXLgsRJXlgM-hfn-8284g/exec'; // Replace with your Apps Script web app URL
 
     let html5QrCode;
     let cameras = [];
     let currentCameraId = null;
     let scannedCode = "";
+    let scannedProductId = "";
     let productData = null;
     let beepSound = document.getElementById("beep");
 
@@ -143,6 +144,8 @@
         }
 
         const cameraSelect = document.getElementById("cameraSelect");
+        cameraSelect.innerHTML = "";
+
         cameras.forEach((cam, index) => {
           const option = document.createElement("option");
           option.value = cam.id;
@@ -150,8 +153,12 @@
           cameraSelect.appendChild(option);
         });
 
-        currentCameraId = cameras[0].id;
+        // Try to start with back camera
+        let backCamera = cameras.find(cam => cam.label.toLowerCase().includes('back') || cam.label.toLowerCase().includes('environment'));
+        currentCameraId = backCamera ? backCamera.id : cameras[0].id;
+
         startScanner(currentCameraId);
+        cameraSelect.value = currentCameraId;
       } catch (err) {
         console.error("Camera initialization error:", err);
       }
@@ -169,9 +176,13 @@
           if (decodedText !== scannedCode) {
             scannedCode = decodedText;
             beepSound.play();
-            document.getElementById("scannedCode").innerText = decodedText;
+
+            // Extract Product ID (before comma if exists)
+            scannedProductId = scannedCode.split(',')[0].trim();
+
+            document.getElementById("scannedCode").innerText = scannedCode;
             document.getElementById("result").innerText = "✅ Code scanned!";
-            fetchProductInfo(decodedText);
+            fetchProductInfo(scannedProductId);
           }
         },
         (err) => { /* Ignore */ }
@@ -188,46 +199,54 @@
       }
     }
 
-    function fetchProductInfo(code) {
-      fetch(`${API_URL}?action=getProduct&itemId=${encodeURIComponent(code)}`)
+    function fetchProductInfo(productId) {
+      fetch(`${API_URL}?action=getProduct&itemId=${encodeURIComponent(productId)}`)
         .then(res => res.json())
         .then(data => {
-          productData = data;
-          document.getElementById("productName").innerText = data.name || "Unknown";
-          document.getElementById("currentStock").innerText = data.stock || 0;
-          document.getElementById("stock-status").innerText = "";
+          if (data.status === "success") {
+            productData = data;
+            document.getElementById("productName").innerText = data.name;
+            document.getElementById("currentStock").innerText = data.stock;
+            document.getElementById("stock-status").innerText = "";
+          } else {
+            productData = null;
+            document.getElementById("productName").innerText = "Unknown";
+            document.getElementById("currentStock").innerText = 0;
+            document.getElementById("stock-status").innerText = "❌ " + data.message;
+          }
         })
         .catch(err => console.error("Error fetching product info:", err));
     }
 
     function sendData(action) {
       const quantity = parseInt(document.getElementById("quantity").value);
-      if (!scannedCode) return alert("Please scan a QR code first.");
+      if (!scannedProductId) return alert("Please scan a QR code first.");
       if (!quantity || quantity <= 0) return alert("Please enter a valid quantity.");
-
-      // Stock check before OUT
-      if (action === 'OUT' && productData && quantity > productData.stock) {
-        document.getElementById("stock-status").innerText = "❌ Not enough stock for this OUT action!";
-        return;
-      }
 
       fetch(API_URL, {
         method: 'POST',
         body: JSON.stringify({
-          itemId: scannedCode,
+          itemId: scannedProductId,
           quantity: quantity,
           action: action,
           timestamp: new Date().toISOString()
         }),
         headers: { 'Content-Type': 'application/json' }
       })
-      .then(res => res.text())
-      .then(res => {
-        document.getElementById("result").innerText = `✅ ${action} recorded!`;
-        document.getElementById("quantity").value = "";
-        fetchProductInfo(scannedCode); // Refresh stock after update
+      .then(res => res.json())
+      .then(data => {
+        if (data.status === "success") {
+          document.getElementById("result").innerText = `✅ ${action} recorded!`;
+          document.getElementById("quantity").value = "";
+          fetchProductInfo(scannedProductId); // Refresh stock
+        } else {
+          document.getElementById("result").innerText = `❌ ${data.message}`;
+        }
       })
-      .catch(err => alert("❌ Failed to send data"));
+      .catch(err => {
+        console.error("Send data error:", err);
+        document.getElementById("result").innerText = "❌ Failed to send data";
+      });
     }
 
     initScanner();
@@ -235,4 +254,3 @@
 
 </body>
 </html>
-

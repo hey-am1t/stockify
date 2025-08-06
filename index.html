@@ -74,11 +74,13 @@
     .btn-out {
       background-color: #dc3545;
     }
-    .btn-toggle {
-      background-color: #007bff;
-    }
-    button:hover {
-      opacity: 0.9;
+    select {
+      width: 100%;
+      padding: 10px;
+      margin-top: 10px;
+      font-size: 16px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
     }
     #result {
       font-size: 1.1em;
@@ -94,6 +96,11 @@
 <body>
 
   <h2>📦 Smart Inventory Scanner</h2>
+  <div>
+    <label for="cameraSelect"><strong>Select Camera:</strong></label>
+    <select id="cameraSelect" onchange="changeCamera()"></select>
+  </div>
+  
   <div id="scanner"></div>
 
   <div id="info-box">
@@ -112,55 +119,73 @@
       <button class="btn-out" onclick="sendData('OUT')">✖ OUT</button>
     </div>
 
-    <div class="btn-group">
-      <button class="btn-toggle" onclick="toggleCamera()">🔄 Switch Camera</button>
-    </div>
-
     <p id="result"></p>
   </div>
 
   <audio id="beep" src="https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg"></audio>
 
   <script>
-    const API_URL = 'https://script.google.com/macros/s/AKfycbwx1g8-V7TCcJCWN0zEqBOBwr3grfKWp9TXJQRFOHMk-Ck6I1ac_ez2xRW3vKPWKFnLLw/exec'; // Replace with your Apps Script URL
+    const API_URL = 'https://script.google.com/macros/s/AKfycbyS05U4febFJFVdF9xPWZ8zlrQF6yC5RH0NwlCe-yq7q3sbguRk4T3sCv4Pq6Xb4QiwgQ/exec'; // Replace with your Apps Script URL
 
     let html5QrCode;
-    let currentCamera = "environment";
+    let cameras = [];
+    let currentCameraId = null;
     let scannedCode = "";
     let productData = null;
     let beepSound = document.getElementById("beep");
 
-    function startScanner() {
-      html5QrCode = new Html5Qrcode("scanner");
-      Html5Qrcode.getCameras().then(devices => {
-        const cameraId = devices.find(device => device.label.toLowerCase().includes(currentCamera))?.id || devices[0].id;
-        html5QrCode.start(
-          cameraId,
-          { fps: 10, qrbox: { width: 250, height: 250 } },
-          (decodedText) => {
-            if (decodedText !== scannedCode) {
-              scannedCode = decodedText;
-              beepSound.play();
-              document.getElementById("scannedCode").innerText = decodedText;
-              document.getElementById("result").innerText = "✅ Code scanned!";
-              fetchProductInfo(decodedText);
-            }
-          },
-          (err) => { /* Ignore */ }
-        );
-      });
-    }
+    async function initScanner() {
+      try {
+        cameras = await Html5Qrcode.getCameras();
+        if (cameras.length === 0) {
+          alert("No camera found on this device.");
+          return;
+        }
 
-    function stopScanner() {
-      if (html5QrCode) {
-        html5QrCode.stop().then(() => html5QrCode.clear());
+        const cameraSelect = document.getElementById("cameraSelect");
+        cameras.forEach((cam, index) => {
+          const option = document.createElement("option");
+          option.value = cam.id;
+          option.text = cam.label || `Camera ${index + 1}`;
+          cameraSelect.appendChild(option);
+        });
+
+        currentCameraId = cameras[0].id;
+        startScanner(currentCameraId);
+      } catch (err) {
+        console.error("Camera initialization error:", err);
       }
     }
 
-    function toggleCamera() {
-      stopScanner();
-      currentCamera = currentCamera === "environment" ? "user" : "environment";
-      startScanner();
+    function startScanner(cameraId) {
+      if (html5QrCode) {
+        html5QrCode.clear();
+      }
+      html5QrCode = new Html5Qrcode("scanner");
+      html5QrCode.start(
+        cameraId,
+        { fps: 10, qrbox: { width: 250, height: 250 } },
+        (decodedText) => {
+          if (decodedText !== scannedCode) {
+            scannedCode = decodedText;
+            beepSound.play();
+            document.getElementById("scannedCode").innerText = decodedText;
+            document.getElementById("result").innerText = "✅ Code scanned!";
+            fetchProductInfo(decodedText);
+          }
+        },
+        (err) => { /* Ignore */ }
+      ).catch(err => console.error("Scanner start error:", err));
+    }
+
+    function changeCamera() {
+      const newCameraId = document.getElementById("cameraSelect").value;
+      if (newCameraId !== currentCameraId) {
+        html5QrCode.stop().then(() => {
+          startScanner(newCameraId);
+          currentCameraId = newCameraId;
+        }).catch(err => console.error("Error switching camera:", err));
+      }
     }
 
     function fetchProductInfo(code) {
@@ -205,7 +230,7 @@
       .catch(err => alert("❌ Failed to send data"));
     }
 
-    startScanner();
+    initScanner();
   </script>
 
 </body>
